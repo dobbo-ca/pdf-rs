@@ -1,0 +1,295 @@
+pdf-rs
+Copyright 2026 The pdfcpu Authors, and the dobbo-ca contributors to pdf-go.
+
+This crate is a Rust port of github.com/dobbo-ca/pdf-go at 113d693.
+
+pdf-go is a hard fork of pdfcpu (github.com/pdfcpu/pdfcpu). pdfcpu is Copyright The pdfcpu
+Authors and is licensed under the Apache License, Version 2.0 (see LICENSE.txt, which is
+pdf-go's licence file, kept verbatim). The upstream project has no NOTICE file. Every Rust
+file below is a derivative work of the pdfcpu / pdf-go Go source it names, and carries the same
+licence:
+
+    Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file
+    except in compliance with the License. You may obtain a copy of the License at
+    http://www.apache.org/licenses/LICENSE-2.0. Unless required by applicable law or agreed to
+    in writing, software distributed under the License is distributed on an "AS IS" BASIS,
+    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+
+Ported files (each work package adds its files here; the Go paths are relative to pdf-go/):
+
+    src/error.rs      pkg/pdfcpu/errors.go, pkg/pdfcpu/model/xreftable.go:2198-2212,
+                      pkg/filter/filter.go:43-46
+    src/config.rs     pkg/pdfcpu/model/configuration.go:493-596, internal/streamlimit/streamlimit.go
+    src/ledger.rs     (new code; memory accounting for the Go allocation behaviour below)
+    src/gocap.rs      (see the Go licence block below)
+    src/par.rs        (new code)
+    src/env.rs        pkg/pdfcpu/types/date.go:27 (time formatting), pkg/pdfcpu/info.go:124
+    src/object/mod.rs, array.rs   pkg/pdfcpu/types/types.go, array.go
+    src/object/dict.rs            pkg/pdfcpu/types/dict.go
+    src/object/stream.rs          pkg/pdfcpu/types/streamdict.go (structs, lazy entry)
+    src/object/stream_codec.rs    pkg/pdfcpu/types/streamdict.go (:249-576: Encode, the decode
+                                  pipeline, DecodeWithLimit, DecodeLengthWithLimit)
+    src/filter/mod.rs             pkg/filter/filter.go
+    src/filter/flate.rs           pkg/filter/flateDecode.go, paeth.go
+    src/filter/lzw.rs             pkg/filter/lzwDecode.go, internal/filter/lzw/reader.go
+    src/filter/ascii85.rs         pkg/filter/ascii85Decode.go
+    src/filter/ascii_hex.rs       pkg/filter/asciiHexDecode.go
+    src/filter/run_length.rs      pkg/filter/runLengthDecode.go
+    src/filter/ccitt.rs           pkg/filter/ccittDecode.go (and the reader of x/image/ccitt, below)
+    src/filter/ccitt_tables.rs    (code tables of x/image/ccitt, below)
+    src/filter/dct.rs             pkg/filter/dctDecode.go
+    src/image/mod.rs, extract.rs  pkg/pdfcpu/extract.go (ExtractImage, ColorSpaceComponents and
+                                  their helpers), pkg/pdfcpu/image.go (imageBooleanEntry,
+                                  integerEntryValue, resolvedCCITTDecodeParms, prepareImageDecode)
+    src/image/render.rs           pkg/pdfcpu/writeImage.go (RenderImage and the renderers)
+    tests/data/filter/*           pkg/filter/testdata/*.txt
+    src/object/string.rs          pkg/pdfcpu/types/string.go
+    src/object/text.rs            pkg/pdfcpu/types/utf16.go, pdfDocEncoding.go
+    src/object/date.rs            pkg/pdfcpu/types/date.go
+    src/object/write.rs           pkg/pdfcpu/types/{types,dict,array}.go (String, PDFString),
+                                  pkg/pdfcpu/writeObjects_pdf.go
+    src/parse/mod.rs              pkg/pdfcpu/model/parse.go
+    src/parse/scan.rs             pkg/pdfcpu/scan/scan.go
+    src/model/xref.rs             pkg/pdfcpu/model/xreftable.go (:1-1000, :1205-1340, :2180-2345)
+    src/model/deref.rs            pkg/pdfcpu/model/dereference.go, recursion.go (:100-130),
+                                  pkg/pdfcpu/read.go (compressedObject), pkg/pdfcpu/types/streamdict.go
+                                  (LazyObjectStreamObject.GetData and DecodedObject)
+    src/model/context.rs          pkg/pdfcpu/model/context.go, version.go, version_error.go
+    src/model/pages.rs            pkg/pdfcpu/model/xreftable.go (:2009-2200 InheritedPageAttrs and
+                                  checkInheritedPageAttrs; :2555-2754 pageObjType, PageDict and its
+                                  walk; :3002-3026 EnsurePageCount), recursion.go (:137-170
+                                  PageTreeVisit)
+    src/api.rs                    pkg/api/api.go (:81-91 ReadContext, :93-145, :236-300
+                                  ReadAndValidate, :145-155 OptimizeContext, :169-190 WriteContext,
+                                  :290-340 ReadValidateAndOptimize), validate.go (Validate), property.go
+                                  (Properties), pkg/pdfcpu/createContext.go and property.go (re-exports)
+    src/model/equal.rs            pkg/pdfcpu/model/equal.go
+    src/model/resources.rs        pkg/pdfcpu/model/resource.go (PageResourceNames), xreftable.go
+                                  (:593-835 FreeObject, DeleteObject; :1062 DeleteDictEntry;
+                                  :2049-2110 consolidateResources; :2372-2470 PageContent and the
+                                  resource dictionary consolidation; :2858ff
+                                  ConsolidatePageResources)
+    src/parse/content.rs          pkg/pdfcpu/model/parseContent.go
+    src/model/names.rs            pkg/pdfcpu/model/nameTree.go (Node, entry, AppendToNames),
+                                  name_tree_keys.go (nameTreeEntry, rawLimits), xreftable.go
+                                  (:1607-1744 BindNameTrees, :1817-1830 NamesDict)
+    src/write/mod.rs              pkg/pdfcpu/write.go (WriteContext, writeObjects, writeRootObject,
+                                  the xref table and xref stream, prepareContextForWriting,
+                                  handleEncryption, deleteRedundantObjects), model/context.go
+                                  (WriteContext), model/xreftable.go (:1080 UndeleteObject)
+    src/write/objects.rs          pkg/pdfcpu/writeObjects.go, writeObjects_pdf.go (appendPDFObject
+                                  is in src/object/write.rs), writeAnnotation.go
+                                  (writingAnnotationEntry, checkWrittenAnnotation,
+                                  writeAnnotationAwareEntry)
+    src/write/pages.rs            pkg/pdfcpu/writePages.go, write.go (writePages)
+    src/write/tests.rs            pkg/pdfcpu/write_test.go
+    src/write/pdf20.rs            pkg/pdfcpu/writeFont.go (prepareCoreFontsForWriting)
+    src/write/corefont.rs         pkg/pdfcpu/font/fontDict.go (EnsureCoreFontMetrics, coreFontWidths,
+                                  coreFontDescriptor, coreFontGlyphMap, coreFontEncoding,
+                                  applyCoreFontDifferences, missingCoreFontMetrics)
+    src/write/corefont_data.rs    internal/corefont/metrics/standard.go (generated from it by a
+                                  script: the glyph maps and the metrics of the 14 standard fonts;
+                                  Copyright 2018 and 2019 The pdfcpu Authors)
+    src/doc/info.rs               pkg/pdfcpu/info.go (ensureInfoDict, handleInfoDict, extractAuthor,
+                                  extractCreator), model/dereference.go (CSVSafeString)
+    src/doc/property.rs           pkg/pdfcpu/property.go (PropertiesAdd, preparePropertiesInfo),
+                                  property_error_handling_test.go
+    src/doc/create.rs             pkg/pdfcpu/createContext.go (CreateXRefTableWithRootDict,
+                                  CreateContext)
+    src/read/mod.rs               pkg/pdfcpu/read.go (:1-546 Read; :2289-2468 buffer, growBufBy,
+                                  newRepairScanner; :2720-2991 object, resolveObject, ParseObject,
+                                  the object read budget; :2991-3137 dereferencedObject and the
+                                  bootstrap integers)
+    src/read/xref.rs              pkg/pdfcpu/read.go (:267-546 startxref and xref subsections;
+                                  :1091-1625 trailer, scanLine, parseXRefSection)
+    src/read/xrefstm.rs           pkg/pdfcpu/read.go (:747-1105 xref streams)
+    src/read/repair.rs            pkg/pdfcpu/read.go (:1626-2290 headerVersion, the repair scanner,
+                                  buildXRefTableStartingAt, readXRefTable)
+    src/read/stream.rs            pkg/pdfcpu/read.go (:2494-2720 filter pipeline; :3150-3551 stream
+                                  content, decrypt and decode; :3891 loadStreamDict)
+    src/read/objstm.rs            pkg/pdfcpu/read.go (:546-830 object stream prolog; :3554-3830
+                                  decompressXRefTableEntry, decodeObjectStream(s))
+    src/read/deref.rs             pkg/pdfcpu/read.go (:3829-4515 dereferenceXRefTable, linearization
+                                  and hint streams, root version, checkForEncryption)
+    src/crypto/mod.rs             pkg/pdfcpu/crypto.go (decryptKey, encryptBytes/decryptBytes,
+                                  encryptStream/decryptStream, encryptAESBytes/decryptAESBytes,
+                                  encryptDeepObject/decryptDeepObject, fileID)
+    src/crypto/validate.rs        pkg/pdfcpu/crypto.go (supportedEncryption,
+                                  validateEncryptionVersion, prepareCryptFilters,
+                                  streamCryptMethod and the helpers they call)
+    src/crypto/auth.rs            pkg/pdfcpu/crypto.go (encKey, key, u, validateUserPassword,
+                                  validateOwnerPassword, hashRev6, permissions),
+                                  pkg/pdfcpu/crypto_password.go (empty password only)
+    src/validate/mod.rs           pkg/pdfcpu/validate/xReftable.go (all but :1408-1757, the link
+                                  checks)
+    src/validate/state.rs         pkg/pdfcpu/validate/rendition.go (renditionPageIndex), model/xreftable.go
+                                  (the validation fields of XRefTable) and the context values of
+                                  validate/property.go, graph_depth.go, mediaValidation.go
+    src/validate/object.rs        pkg/pdfcpu/validate/object.go, array_cardinality.go,
+                                  tree_traversal.go, graph_depth.go, destination.go (:34-48
+                                  contexts)
+    src/validate/trapnet.rs       pkg/pdfcpu/validate/trapnet_states.go
+    src/validate/annotation.rs    pkg/pdfcpu/validate/annotation.go, annotation_context_test.go,
+                                  model/annotation.go (CheckAnnotationAppearance)
+    src/annotation.rs             pkg/pdfcpu/annotation.go (Annotation, linkAnnotation),
+                                  pkg/pdfcpu/model/annotation.go (AnnotationType, PgAnnots)
+    src/validate/name_tree.rs     pkg/pdfcpu/validate/nameTree.go
+    src/validate/number_tree.rs   pkg/pdfcpu/validate/numberTree.go (checkValidationTree)
+    src/validate/struct_tree.rs   pkg/pdfcpu/validate/structTree.go, structure_hierarchy.go,
+                                  structure_hierarchy_test.go, tree_test.go,
+                                  model/recursion.go (StructureTreeVisit)
+    src/validate/active_content.rs  pkg/pdfcpu/validate/active_content.go (not ported: notices)
+    src/validate/info.rs          pkg/pdfcpu/validate/info.go, info_test.go
+    src/validate/metadata.rs      pkg/pdfcpu/validate/metaData.go
+    src/validate/xmp.rs           pkg/pdfcpu/model/metadata.go (XMPMeta and the date layouts)
+    src/validate/property.rs      pkg/pdfcpu/validate/property.go
+    src/validate/viewer_prefs.rs  pkg/pdfcpu/validate/viewerPreferences.go
+    src/validate/action.rs        pkg/pdfcpu/validate/action.go, form_actions.go, action_test.go,
+                                  action_context_test.go, action_shared_test.go,
+                                  model/recursion.go (ActionVisit)
+    src/validate/destination.rs   pkg/pdfcpu/validate/destination.go (without :34-48),
+                                  destination_remote.go
+    src/validate/file_spec.rs     pkg/pdfcpu/validate/fileSpec.go, link_collect.go
+                                  (isURLFileSpecification, isEmbeddedFileSpecification)
+    src/validate/form.rs          pkg/pdfcpu/validate/form.go, form_hierarchy.go, form_hierarchy_test.go
+    src/validate/font.rs          pkg/pdfcpu/validate/font.go, font_type1_test.go
+    src/optimize/font_name.rs     pkg/pdfcpu/font/fontDict.go (Name), pkg/pdfcpu/primitives/font.go
+                                  (FormFontResDict)
+    src/optimize/mod.rs           pkg/pdfcpu/optimize.go (all but :46-247 and :1365-1590),
+                                  model/context.go (OptimizationContext), model/resource.go
+                                  (FontObject, ImageObject)
+    src/optimize/tests.rs         pkg/pdfcpu/optimize_test.go
+    src/optimize/frame.rs         pkg/pdfcpu/object_frame.go
+    src/validate/xobject.rs       pkg/pdfcpu/validate/xObject.go, image_arrays.go,
+                                  xobject_context_test.go
+    src/validate/colorspace.rs    pkg/pdfcpu/validate/colorspace.go, colorspace_context_test.go
+    src/validate/extgstate.rs     pkg/pdfcpu/validate/extGState.go
+    src/validate/function.rs      pkg/pdfcpu/validate/function.go, object.go (validateFunctionObjects)
+    src/validate/pattern.rs       pkg/pdfcpu/validate/pattern.go
+    src/validate/page.rs          pkg/pdfcpu/validate/page.go, page_resources_test.go,
+                                  order_deterministic_test.go (resource dict order)
+    src/validate/optional_content.rs  pkg/pdfcpu/validate/optionalContent.go,
+                                  ghsa_vwmc_mhq7_fqhc_test.go (visibility expressions)
+    src/validate/shading.rs       pkg/pdfcpu/validate/shading.go, shading_arrays.go
+    src/validate/media.rs         pkg/pdfcpu/validate/media.go, mediaValidation.go, rendition.go,
+                                  rendition_context_test.go, model/recursion.go (RenditionVisit)
+    src/validate/three_d.rs       pkg/pdfcpu/validate/threeD.go
+    src/validate/thread.rs        pkg/pdfcpu/validate/thread.go, thread_test.go,
+                                  model/recursion.go (BeadVisit)
+    src/validate/outline.rs       pkg/pdfcpu/validate/outlineTree.go, outline_repair_test.go
+    src/validate/{action,destination,form,name_tree,number_tree,
+                  outline,struct_tree,thread}.rs   stubs that name the Go file their package ports
+    examples/oracle.rs            the parity operations of tests/parity/go/oracle (read, pages,
+                                  streams, budget, encode, images, validate, rvo, propsadd, props,
+                                  write, writeopt, build: pkg/api/api.go ReadContext, Validate,
+                                  ReadValidateAndOptimize, Properties, WriteContext,
+                                  model/xreftable.go PageDict, DecodeStream, NewStreamDictForBuf,
+                                  pkg/pdfcpu/createContext.go)
+    examples/bench.rs             the benchmark classes of tests/parity/go/oracle/bench.go (the
+                                  same pkg/api and pkg/pdfcpu calls as examples/oracle.rs)
+    src/fuzz_api.rs               (new code; the entry point that tests/fuzz calls)
+    tests/fuzz/*                  (new code; the cargo-fuzz crate: Cargo.toml, common.rs,
+                                  fuzz_targets/*.rs, seeds/*)
+    tests/data/*.pdf, pdf20/*, image-fixtures/test.pdf   pkg/testdata (all top-level PDFs, pdf20,
+                                  image-fixtures/test.pdf), unchanged
+    tests/data/samples/*          60 of the 441 PDFs of pkg/samples, every fifth one of those under
+                                  600 KB, sorted by path (docs/parity.md)
+
+Vendored for the Go side of the parity harness (docs/parity.md), each with its licence file kept:
+
+    tests/parity/go/upstream/     the non-test sources of pdf-go at 113d693 that the oracle builds
+                                  (pkg/api, pkg/filter, pkg/font, pkg/log, pkg/pdfcpu/..., the
+                                  internal packages they import), with LICENSE.txt and go.mod
+                                  trimmed to the modules the build needs
+    tests/parity/go/oracle/       new code: main.go, ops.go, gen.go, bench.go (Apache-2.0, as this crate)
+    tests/parity/go/patches/determinism.patch   a patch to eight files of upstream/ (crypto.go,
+                                  info.go, object_frame.go, optimize.go, writeFont.go,
+                                  writeObjects.go, model/xreftable.go, types/dict.go): sorted map
+                                  loops and two hooks, applied to a copy by build.sh; the files of
+                                  upstream/ stay verbatim
+    tests/parity/go/deps/uax29    github.com/clipperhouse/uax29/v2 v2.7.0 (MIT)
+    tests/parity/go/deps/go-runewidth   github.com/mattn/go-runewidth v0.0.31 (MIT)
+    tests/parity/go/deps/hhrutter-tiff  github.com/hhrutter/tiff v1.0.7 (BSD-style, LICENSE)
+    tests/parity/go/deps/stringprep     github.com/xdg-go/stringprep v1.0.4 (Apache-2.0)
+    tests/parity/go/deps/yaml-v3        go.yaml.in/yaml/v3 v3.0.5 (Apache-2.0 and MIT, LICENSE)
+    tests/parity/go/deps/x-crypto, x-image, x-text   golang.org/x/{crypto v0.58.0 (ocsp only),
+                                  image v0.47.0 (ccitt, riff, vp8, vp8l, webp), text v0.43.0
+                                  (encoding, transform, unicode/norm)} (BSD, LICENSE and PATENTS)
+
+The Go standard library, for the files that port or model it. These carry the Go licence:
+
+    src/gocap.rs      bytes/buffer.go (growth), runtime/msize.go, internal/runtime/gc/sizeclasses.go
+                      (Go 1.27.4)
+    src/env.rs        time/format.go (Time.String)
+    src/object/date.rs    time/format.go (Parse: skip, lookup, getnum, the four layouts), strconv.Atoi
+    src/object/string.rs  encoding/hex (Decode)
+    src/filter/lzw.rs      internal/filter/lzw/reader.go (from compress/lzw; the licence file is kept at
+                      tests/parity/go/upstream/internal/filter/lzw/LICENSE)
+    src/filter/flate.rs    pkg/filter/paeth.go (the Paeth predictor, from image/png; the rest of the
+                      file is under the Apache section above)
+    src/filter/ascii85.rs encoding/ascii85 (Decode and the Decoder's buffering)
+    src/filter/ascii_hex.rs  encoding/hex (Decode)
+    src/parse/mod.rs      strconv.Atoi (ParseUint, ParseInt), strings.TrimSpace
+    src/read/mod.rs       strconv.Atoi, strings.TrimSpace, strings.Fields (the byte helpers), bufio.Reader
+                      and the fillBuffer reads (PosReader)
+    src/parse/scan.rs     bufio/scan.go (Scanner.Scan, Buffer; the buffer arithmetic)
+    src/filter/goflate/*   compress/flate (deflate.go, deflatefast.go, level1.go, level6.go,
+                      huffman_bit_writer.go, huffman_code.go, token.go), compress/zlib/writer.go;
+                      lazy.rs is deflate.go's levels 7-9 code, level1.rs is level1.go
+    src/filter/gob.rs      encoding/gob (encoder.go, encode.go, type.go, decoder.go, decode.go:
+                      the encoder for image.Gray, YCbCr, RGBA and CMYK, and the decoder into CMYK)
+    src/filter/gojpeg.rs   image/jpeg (reader.go, huffman.go, scan.go, dct.go) and
+                      image/internal/imageutil (DrawYCbCr)
+    src/image/png.rs       image/png (writer.go, paeth.go), bufio (Writer.Write and Flush),
+                      hash/crc32 (the IEEE table); image/color (CMYKToRGB) is in src/image/render.rs
+    src/image/tiff.rs      github.com/hhrutter/tiff v1.0.7 (writer.go: Encode, encodePage,
+                      marshalIFD), BSD-style licence of The Go Authors (the text above, with
+                      "Google Inc." for "Google LLC"; the file is kept at
+                      tests/parity/go/deps/hhrutter-tiff/LICENSE)
+    src/crypto/md5.rs      crypto/md5 (md5block.go, md5.go)
+    src/crypto/rc4.rs      crypto/rc4
+    src/crypto/sha2.rs     crypto/internal/fips140/sha256 and sha512 (sha256block.go, sha512block.go)
+    src/crypto/aes.rs, src/crypto/aes_tables.rs   crypto/internal/fips140/aes (aes_generic.go,
+                      const.go) and crypto/cipher (cbc.go); Go's AES code is derived in part from
+                      the public-domain rijndael-alg-fst.c of Vincent Rijmen, Antoon Bosselaers
+                      and Paulo Barreto
+    src/crypto/ct.rs       crypto/subtle (ConstantTimeCompare)
+    src/validate/xmp.rs    encoding/xml (xml.go: Decoder.Token, rawToken, text, name space translation;
+                      read.go: unmarshal, unmarshalPath, copyValue), strconv.ParseBool, ParseUint,
+                      time/format.go (Parse, getnum) and format_rfc3339.go (parseRFC3339)
+    tests/data/goflate/*   compress/flate testdata (huffman-*, null-long-match.*), and the vectors in
+                      src/filter/goflate/testdata.rs from compress/flate huffman_bit_writer_test.go
+
+Copyright 2009 The Go Authors.
+
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions are
+met:
+
+   * Redistributions of source code must retain the above copyright
+notice, this list of conditions and the following disclaimer.
+   * Redistributions in binary form must reproduce the above
+copyright notice, this list of conditions and the following disclaimer
+in the documentation and/or other materials provided with the
+distribution.
+   * Neither the name of Google LLC nor the names of its
+contributors may be used to endorse or promote products derived from
+this software without specific prior written permission.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+"AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
+A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
+OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
+LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+(INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+src/filter/ccitt.rs and src/filter/ccitt_tables.rs (added by the filters package) port
+golang.org/x/image/ccitt at x/image v0.47.0, which carries the licence above.
+
+src/validate/file_spec.rs (added by the file specification package) ports url.ParseRequestURI
+(net/url/url.go, net/netip/netip.go parseIPv6) of Go 1.27, which carries the licence above.

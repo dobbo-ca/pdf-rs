@@ -1,0 +1,368 @@
+--- a/pkg/pdfcpu/crypto.go
++++ b/pkg/pdfcpu/crypto.go
+@@ -45,6 +45,13 @@
+ 	"github.com/dobbo-ca/pdf-go/pkg/log"
+ 	"github.com/dobbo-ca/pdf-go/pkg/pdfcpu/model"
+ 	"github.com/dobbo-ca/pdf-go/pkg/pdfcpu/types"
++)
++
++// TimeNow and RandReader are the clock and the random source of the package. The parity oracle
++// (tests/parity) replaces them with fixed values so that two runs write the same bytes.
++var (
++	TimeNow              = time.Now
++	RandReader io.Reader = rand.Reader
+ )
+ 
+ var (
+@@ -2296,7 +2303,7 @@
+ 	data := make([]byte, aes.BlockSize+len(b))
+ 	iv := data[:aes.BlockSize]
+ 
+-	_, err := io.ReadFull(rand.Reader, iv)
++	_, err := io.ReadFull(RandReader, iv)
+ 	if err != nil {
+ 		return nil, err
+ 	}
+@@ -2355,7 +2362,7 @@
+ 	h := md5.New()
+ 
+ 	// Current timestamp.
+-	h.Write([]byte(time.Now().String()))
++	h.Write([]byte(TimeNow().String()))
+ 
+ 	// File location - ignore, we don't have this.
+ 
+@@ -2368,8 +2375,8 @@
+ 		if err != nil {
+ 			return "", err
+ 		}
+-		for _, v := range d {
+-			o, err := ctx.Dereference(v)
++		for _, k := range slices.Sorted(maps.Keys(d)) {
++			o, err := ctx.Dereference(d[k])
+ 			if err != nil {
+ 				return "", err
+ 			}
+@@ -2384,13 +2391,13 @@
+ 
+ func calcFileEncKey(ctx *model.Context) error {
+ 	ctx.EncKey = make([]byte, 32)
+-	_, err := io.ReadFull(rand.Reader, ctx.EncKey)
++	_, err := io.ReadFull(RandReader, ctx.EncKey)
+ 	return err
+ }
+ 
+ func calcOAndUAES256(ctx *model.Context, d types.Dict) (err error) {
+ 	b := make([]byte, 16)
+-	_, err = io.ReadFull(rand.Reader, b)
++	_, err = io.ReadFull(RandReader, b)
+ 	if err != nil {
+ 		return err
+ 	}
+@@ -2408,7 +2415,7 @@
+ 	///////////////////////////////////
+ 
+ 	b = make([]byte, 16)
+-	_, err = io.ReadFull(rand.Reader, b)
++	_, err = io.ReadFull(RandReader, b)
+ 	if err != nil {
+ 		return err
+ 	}
+@@ -2460,7 +2467,7 @@
+ 
+ func calcOAndUAES256Rev6(ctx *model.Context, d types.Dict) (err error) {
+ 	b := make([]byte, 16)
+-	_, err = io.ReadFull(rand.Reader, b)
++	_, err = io.ReadFull(RandReader, b)
+ 	if err != nil {
+ 		return err
+ 	}
+@@ -2481,7 +2488,7 @@
+ 	///////////////////////////
+ 
+ 	b = make([]byte, 16)
+-	_, err = io.ReadFull(rand.Reader, b)
++	_, err = io.ReadFull(RandReader, b)
+ 	if err != nil {
+ 		return err
+ 	}
+--- a/pkg/pdfcpu/info.go
++++ b/pkg/pdfcpu/info.go
+@@ -19,9 +19,10 @@
+ import (
+ 	"context"
+ 	"fmt"
++	"maps"
++	"slices"
+ 	"sort"
+ 	"strings"
+-	"time"
+ 
+ 	"github.com/dobbo-ca/pdf-go/internal/contextutil"
+ 	"github.com/dobbo-ca/pdf-go/pkg/log"
+@@ -57,7 +58,8 @@
+ 
+ // handleInfoDict extracts relevant infoDict fields into the context.
+ func handleInfoDict(ctx *model.Context, d types.Dict) (err error) {
+-	for key, value := range d {
++	for _, key := range slices.Sorted(maps.Keys(d)) {
++		value := d[key]
+ 
+ 		switch key {
+ 
+@@ -121,7 +123,7 @@
+ 	// ModDate		        modified by pdfcpu
+ 	// Trapped              -
+ 
+-	now := types.DateString(time.Now())
++	now := types.DateString(TimeNow())
+ 
+ 	v := "pdfcpu " + model.VersionStr
+ 
+--- a/pkg/pdfcpu/model/xreftable.go
++++ b/pkg/pdfcpu/model/xreftable.go
+@@ -712,11 +712,11 @@
+ 	restore := &deleteObjectDictRestore{dict: dict, value: value, found: found}
+ 	d.restores = append(d.restores, restore)
+ 	d.stack = append(d.stack, deleteObjectFrame{restore: restore})
+-	for key, o := range dict {
++	for _, key := range slices.Sorted(maps.Keys(dict)) {
+ 		if key == deleteObjectMarkerKey {
+ 			continue
+ 		}
+-		d.stack = append(d.stack, deleteObjectFrame{object: o})
++		d.stack = append(d.stack, deleteObjectFrame{object: dict[key]})
+ 	}
+ 	if found {
+ 		d.stack = append(d.stack, deleteObjectFrame{object: value})
+@@ -1731,7 +1731,8 @@
+ 	}
+ 
+ 	// Iterate over internal name tree rep.
+-	for k, v := range xRefTable.Names {
++	for _, k := range slices.Sorted(maps.Keys(xRefTable.Names)) {
++		v := xRefTable.Names[k]
+ 		if log.WriteEnabled() {
+ 			log.Write.Printf("bindNameTree: %s\n", k)
+ 		}
+--- a/pkg/pdfcpu/object_frame.go
++++ b/pkg/pdfcpu/object_frame.go
+@@ -18,6 +18,7 @@
+ 
+ import (
+ 	"fmt"
++	"maps"
+ 	"slices"
+ 	"strings"
+ 
+@@ -54,7 +55,7 @@
+ // pushDict schedules the entries of d whose keys skip does not reject.
+ func (s *objectStack) pushDict(d types.Dict, skip func(key string) bool) {
+ 	start := len(s.keys)
+-	for key := range d {
++	for _, key := range slices.Sorted(maps.Keys(d)) {
+ 		if skip == nil || !skip(key) {
+ 			s.keys = append(s.keys, key)
+ 		}
+--- a/pkg/pdfcpu/optimize.go
++++ b/pkg/pdfcpu/optimize.go
+@@ -404,7 +404,11 @@
+ 	recordedCorrupt := false
+ 
+ 	// Iterate over font resource dict.
+-	for rName, v := range rDict {
++	for _, rName := range slices.Sorted(maps.Keys(rDict)) {
++		v, ok := rDict[rName]
++		if !ok {
++			continue
++		}
+ 		if err := contextutil.Check(c); err != nil {
+ 			return err
+ 		}
+@@ -623,7 +627,8 @@
+ 	}
+ 
+ 	cachedObjNrs := []int{}
+-	for objNr, sd1 := range f {
++	for _, objNr := range slices.Sorted(maps.Keys(f)) {
++		sd1 := f[objNr]
+ 		if *sd1.StreamLength == *sd.StreamLength {
+ 			cachedObjNrs = append(cachedObjNrs, objNr)
+ 		}
+@@ -808,7 +813,11 @@
+ 		log.Optimize.Printf("optimizeExtGStateResourcesDict page#%dbegin: %s\n", pageObjNumber, rDict)
+ 	}
+ 
+-	for rName, v := range rDict {
++	for _, rName := range slices.Sorted(maps.Keys(rDict)) {
++		v, ok := rDict[rName]
++		if !ok {
++			continue
++		}
+ 		if err := contextutil.Check(c); err != nil {
+ 			return err
+ 		}
+@@ -889,7 +898,11 @@
+ 
+ 	pageImages := pageImages(ctx, pageNr)
+ 
+-	for rName, v := range rDict {
++	for _, rName := range slices.Sorted(maps.Keys(rDict)) {
++		v, ok := rDict[rName]
++		if !ok {
++			continue
++		}
+ 		if err := contextutil.Check(c); err != nil {
+ 			return err
+ 		}
+@@ -1291,9 +1304,10 @@
+ func fixCorruptFontResDicts(ctx *model.Context) error {
+ 	// TODO: hacky, also because we don't really take the fontDict type into account.
+ 	for _, d := range ctx.Optimize.CorruptFontResDicts {
+-		for k, v := range d {
+-			if v == nil {
+-				for fn, objNrs := range ctx.Optimize.Fonts {
++		for _, k := range slices.Sorted(maps.Keys(d)) {
++			if d[k] == nil {
++				for _, fn := range slices.Sorted(maps.Keys(ctx.Optimize.Fonts)) {
++					objNrs := ctx.Optimize.Fonts[fn]
+ 					if strings.HasPrefix(fn, "Arial") && (len(fn) == 5 || fn[5] != '-') {
+ 						model.ShowRepaired(fmt.Sprintf("font %s mapped to objNr %d", k, objNrs[0]))
+ 						d[k] = *keptObjectIndRef(ctx, objNrs[0])
+@@ -1708,7 +1722,11 @@
+ 	}
+ 
+ 	// Iterate over font resource dict.
+-	for rName, v := range d {
++	for _, rName := range slices.Sorted(maps.Keys(d)) {
++		v, ok := d[rName]
++		if !ok {
++			continue
++		}
+ 
+ 		indRef, ok := v.(types.IndirectRef)
+ 		if !ok {
+@@ -1777,8 +1795,8 @@
+ 
+ func ensureDirectWidthForXObjs(ctx *model.Context) error {
+ 	for _, imgObjs := range ctx.Optimize.PageImages {
+-		for objNr, v := range imgObjs {
+-			if v {
++		for _, objNr := range slices.Sorted(maps.Keys(imgObjs)) {
++			if imgObjs[objNr] {
+ 				imageObj := ctx.Optimize.ImageObjects[objNr]
+ 				if err := resolveWidth(ctx, imageObj.ImageDict); err != nil {
+ 					return fmt.Errorf("image obj#%d: resolve width: %w", objNr, err)
+--- a/pkg/pdfcpu/types/dict.go
++++ b/pkg/pdfcpu/types/dict.go
+@@ -18,6 +18,8 @@
+ 
+ import (
+ 	"fmt"
++	"maps"
++	"slices"
+ 	"sort"
+ 	"strconv"
+ 	"strings"
+@@ -97,13 +99,13 @@
+ 	if found {
+ 		return v, found
+ 	}
+-	for n, v := range d {
++	for _, n := range slices.Sorted(maps.Keys(d)) {
+ 		k, err := DecodeName(n)
+ 		if err != nil {
+ 			return nil, false
+ 		}
+ 		if k == key {
+-			return v, true
++			return d[n], true
+ 		}
+ 	}
+ 	return nil, false
+--- a/pkg/pdfcpu/writeFont.go
++++ b/pkg/pdfcpu/writeFont.go
+@@ -19,6 +19,8 @@
+ import (
+ 	"context"
+ 	"fmt"
++	"maps"
++	"slices"
+ 
+ 	"github.com/dobbo-ca/pdf-go/internal/contextutil"
+ 	pdffont "github.com/dobbo-ca/pdf-go/pkg/pdfcpu/font"
+@@ -57,7 +59,11 @@
+ 		if err := prepareCoreFontDict(ctx, o, owner); err != nil {
+ 			return err
+ 		}
+-		for _, v := range o {
++		for _, k := range slices.Sorted(maps.Keys(o)) {
++			v, ok := o[k]
++			if !ok {
++				continue
++			}
+ 			if err := prepareCoreFontObject(c, ctx, v, owner, depth+1); err != nil {
+ 				return err
+ 			}
+@@ -79,8 +85,9 @@
+ 	if !ctx.PDF20() {
+ 		return nil
+ 	}
+-	for objNr, e := range ctx.Table {
+-		if e == nil || e.Free || e.Object == nil {
++	for _, objNr := range slices.Sorted(maps.Keys(ctx.Table)) {
++		e, ok := ctx.Table[objNr]
++		if !ok || e == nil || e.Free || e.Object == nil {
+ 			continue
+ 		}
+ 		o := e.Object
+--- a/pkg/pdfcpu/writeObjects.go
++++ b/pkg/pdfcpu/writeObjects.go
+@@ -19,6 +19,8 @@
+ import (
+ 	"context"
+ 	"fmt"
++	"maps"
++	"slices"
+ 	"strconv"
+ 	"strings"
+ 
+@@ -638,7 +640,11 @@
+ }
+ 
+ func writeDirectDict(c context.Context, ctx *model.Context, d types.Dict) error {
+-	for k, v := range d {
++	for _, k := range slices.Sorted(maps.Keys(d)) {
++		v, ok := d[k]
++		if !ok {
++			continue
++		}
+ 		if err := contextutil.Check(c); err != nil {
+ 			return err
+ 		}
+@@ -732,7 +738,11 @@
+ 		return err
+ 	}
+ 
+-	for k, v := range d {
++	for _, k := range slices.Sorted(maps.Keys(d)) {
++		v, ok := d[k]
++		if !ok {
++			continue
++		}
+ 		if err := contextutil.Check(c); err != nil {
+ 			return err
+ 		}
+@@ -766,7 +776,11 @@
+ 		return err
+ 	}
+ 
+-	for _, v := range sd.Dict {
++	for _, k := range slices.Sorted(maps.Keys(sd.Dict)) {
++		v, ok := sd.Dict[k]
++		if !ok {
++			continue
++		}
+ 		if err := contextutil.Check(c); err != nil {
+ 			return err
+ 		}

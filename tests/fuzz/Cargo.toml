@@ -1,0 +1,138 @@
+[package]
+name = "pdf-fuzz"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[package.metadata]
+cargo-fuzz = true
+
+# deflate and jpeg are the same pins as the root manifest: the png_encode target inflates what the
+# PNG writer made, and the gob target builds the jpeg crate's image types.
+[dependencies]
+deflate = { git = "https://github.com/dobbo-ca/deflate-rs", rev = "211232f521f4378efd74f224df2fc05213cec94a" }
+jpeg = { git = "https://github.com/dobbo-ca/jpeg-rs", rev = "c0cf0fcc3a5c4284bf09615cea44660247f07e99" }
+libfuzzer-sys = "0.4"
+pdf = { path = "../.." }
+
+# Not part of the root package: only this crate may depend on libfuzzer-sys.
+[workspace]
+
+[[bin]]
+name = "read"
+path = "fuzz_targets/read.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "read_validate"
+path = "fuzz_targets/read_validate.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "rvo"
+path = "fuzz_targets/rvo.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "write_fallback"
+path = "fuzz_targets/write_fallback.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "extract_image"
+path = "fuzz_targets/extract_image.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "filter_dct_cmyk"
+path = "fuzz_targets/filter_dct_cmyk.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "filter_flate"
+path = "fuzz_targets/filter_flate.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "filter_lzw"
+path = "fuzz_targets/filter_lzw.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "filter_ascii85"
+path = "fuzz_targets/filter_ascii85.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "filter_asciihex"
+path = "fuzz_targets/filter_asciihex.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "filter_runlength"
+path = "fuzz_targets/filter_runlength.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "filter_ccitt"
+path = "fuzz_targets/filter_ccitt.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "png_encode"
+path = "fuzz_targets/png_encode.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "gob"
+path = "fuzz_targets/gob.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "gocap"
+path = "fuzz_targets/gocap.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "parse_object"
+path = "fuzz_targets/parse_object.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "parse_content"
+path = "fuzz_targets/parse_content.rs"
+test = false
+doc = false
+bench = false

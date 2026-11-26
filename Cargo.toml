@@ -1,0 +1,27 @@
+[package]
+name = "pdf"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.99"
+license = "Apache-2.0"
+description = "PDF reader, validator, optimizer and writer with strict resource limits. Rust port of the part of dobbo-ca/pdf-go (a pdfcpu fork) that byblos uses."
+publish = false
+
+# The owner's ports, pinned by git rev (not on crates.io). See docs/design.md section 2.
+[dependencies]
+deflate = { git = "https://github.com/dobbo-ca/deflate-rs", rev = "211232f521f4378efd74f224df2fc05213cec94a" }
+jpeg = { git = "https://github.com/dobbo-ca/jpeg-rs", rev = "c0cf0fcc3a5c4284bf09615cea44660247f07e99" }
+
+# The worker pool (see jpeg-rs and tiff-rs): safe Rust cannot reuse a thread for jobs that borrow
+# short-lived buffers, and rayon's scope can. Justified in docs/threading.md.
+rayon = "=1.12.0"
+
+# The tests parse and decode whole documents; the dependencies run optimised under `cargo test`,
+# this crate keeps overflow checks and debug assertions.
+[profile.dev.package."*"]
+opt-level = 2
+
+# One codegen unit, so the decode loops inline across modules (jpeg-rs's docs/benchmarks.md asks
+# dependents to set this for `jpeg`).
+[profile.release]
+codegen-units = 1
